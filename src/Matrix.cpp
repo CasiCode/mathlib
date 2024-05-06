@@ -2,7 +2,7 @@
  * matrix.cpp
  */
 
-#include "Matrix.hpp"
+#include "../include/Matrix.hpp"
 #include <stdexcept>
 #include <cmath>
 
