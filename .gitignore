@@ -37,3 +37,8 @@ output.txt
 temp.cpp
 temp.hpp
 main.cpp
+.replit
+replit.nix
+.ccls-cache
+.git
+.makefile
