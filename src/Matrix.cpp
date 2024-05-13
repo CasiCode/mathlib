@@ -3,8 +3,10 @@
  */
 
 #include "../include/Matrix.hpp"
-#include <stdexcept>
 #include <cmath>
+#include <tuple>
+
+#include <iostream> // DELETE LATER
 
 #define EPS 1e-10
 
@@ -165,6 +167,33 @@ Matrix Matrix::createIdentity(int size) {
   return temp;
 }
 
+/*void QRdecomp(int n, int m, Matrix A, Matrix Q) { // TODO
+  double r;
+  double c;
+  double s;
+  double temp;
+  int min;
+  Q = Matrix::createIdentity(m);
+  min = (m < n ? m : n);
+  for (int i = 0; i < min; i++)
+    for (int j = i + 1; j < m; j++)
+      if (A(j, i) != 0) {
+        r = hypot(A(i, i), A(j, i));
+        c = static_cast<double>(A(i, i)) / r;
+        s = static_cast<double>(A(j, i)) / r;
+        for (int k = 0; k < n; k++) {
+          temp = A(i, k);
+          A(i, k) = c * A(i, k) + s * A(j, k);
+          A(j, k) = -s * temp + c * A(j, k);
+        }
+        for (int k = 0; k < m; k++) {
+          temp = Q(k, i);
+          Q(k, i) = c * Q(k, i) + s * Q(k, j);
+          Q(k, j) = -s * temp + c * Q(k, j);
+        }
+      }
+}*/
+
 /*Matrix Matrix::solve(Matrix A, Matrix b) {
   // Gaussian elimination
   for (int i = 0; i < A.rows_; ++i) {
@@ -209,7 +238,9 @@ Matrix Matrix::solve(Matrix A, Matrix b) {
   for (int i = 0; i < A.cols_; ++i) { // rows_ ???
     int pivotRow = i;
     for (int j = i + 1; j < A.rows_; ++j) {
-      if (std::fabs(A(i, j)) > std::fabs(A(pivotRow, i))) { pivotRow = j; }
+      if (std::fabs(A(i, j)) > std::fabs(A(pivotRow, i))) {
+        pivotRow = j;
+      }
     }
     if (pivotRow != i) {
       A.swapRows(i, pivotRow);
@@ -220,7 +251,7 @@ Matrix Matrix::solve(Matrix A, Matrix b) {
       throw domain_error("Error: the coefficient matrix has 0 as a pivot. "
                          "Please fix the input and try again.");
     }
-    
+
     for (int j = i + 1; j < A.rows_; ++j) {
       for (int k = i + 1; k < A.cols_; ++k) {
         A(j, k) -= A(i, k) * (A(j, i) / A(i, i));
@@ -228,8 +259,9 @@ Matrix Matrix::solve(Matrix A, Matrix b) {
           A(j, k) = 0;
       }
       b(j, 0) -= b(i, 0) * (A(j, i) / A(i, i));
-      if (b(j, 0) < EPS && b(j, 0) > -1 * EPS) // changed A.p to b.p everywhere!!!
-        b(j, 0) = 0; // here too
+      if (b(j, 0) < EPS &&
+          b(j, 0) > -1 * EPS) // changed A.p to b.p everywhere!!!
+        b(j, 0) = 0;          // here too
       A(j, i) = 0;
     }
   }
@@ -243,7 +275,7 @@ Matrix Matrix::solve(Matrix A, Matrix b) {
   for (int i = x.rows_ - 2; i >= 0; --i) {
     int sum = 0;
     for (int j = i + 1; j < x.rows_; ++j) {
-      sum += A(i, j) * x(j,0);
+      sum += A(i, j) * x(j, 0);
     }
     x(i, 0) = (b(i, 0) - sum) / A(i, i);
     if (x(i, 0) < EPS && x(i, 0) > -1 * EPS)
@@ -251,6 +283,179 @@ Matrix Matrix::solve(Matrix A, Matrix b) {
   }
 
   return x;
+}
+
+std::tuple<Matrix, Matrix, int, int>
+Matrix::jacobiEigenvalue(int n, Matrix a, int maxIterations) {
+  //  Purpose:
+  //    JACOBI_EIGENVALUE computes the eigenvalues and eigenvectors of a
+  //    real symmetric matrix, using Rutishauser's modfications of the classical
+  //    Jacobi rotation method with threshold pivoting.
+  //  Input:
+  //    int N, the order of the matrix.
+  //    Matrix A[N*N], the matrix, which must be square, real,
+  //    and symmetric.
+  //    int IT_MAX, the maximum number of iterations.
+  //  Output:
+  //    double V[N*N], the matrix of eigenvectors.
+  //    double D[N], the eigenvalues, in descending order.
+  //    int &IT_NUM, the total number of iterations.
+  //    int &ROT_NUM, the total number of rotations.
+  double *bw;
+  double c;
+  double g;
+  double gapq;
+  double h;
+  double s;
+  double t;
+  double tau;
+  double term;
+  double termp;
+  double termq;
+  double theta;
+  double thresh;
+  double w;
+  double *zw;
+
+  Matrix eigenvecs = Matrix::createIdentity(n);
+  Matrix eigenvals = Matrix(1, n);
+
+  int iterations = 0;
+  int rotations = 0;
+
+  eigenvals = a.getMainDiagonal();
+
+  bw = new double[n];
+  zw = new double[n];
+
+  for (int i = 0; i < n; i++) {
+    bw[i] = eigenvals[i];
+    zw[i] = 0.0;
+  }
+
+  while (iterations < maxIterations) {
+    iterations++;
+    //  The convergence threshold is based on the size of the elements in
+    //  the strict upper triangle of the matrix.
+    thresh = 0.0;
+    for (int j = 0; j < n; j++) {
+      for (int i = j + 1; i < n; i++) {
+        thresh = thresh + pow(a(i, j), 2);
+      }
+    }
+
+    thresh = sqrt(thresh) / static_cast<double>(4 * n);
+
+    if (thresh == 0.0) {
+      break;
+    }
+
+    for (int p = 0; p < n; p++) {
+      for (int q = p + 1; q < n; q++) {
+        gapq = 10.0 * fabs(a[p + q * n]);
+        termp = gapq + fabs(eigenvals[p]);
+        termq = gapq + fabs(eigenvals[q]);
+        //  Annihilate tiny offdiagonal elements.
+        if (4 < iterations && termp == fabs(eigenvals[p]) &&
+            termq == fabs(eigenvals[p])) {
+          a[p + q * n] = 0.0; // SEGMENTATION FAULT HERE
+        }
+        //  Otherwise, apply a rotation.
+        else if (thresh <= fabs(a[p + q * n])) {
+          h = eigenvals[q] - eigenvals[p];
+          term = fabs(h) + gapq;
+
+          if (term == fabs(h)) {
+            t = a[p + q * n] / h;
+          } else {
+            theta = 0.5 * h / a[p + q * n];
+            t = 1.0 / (fabs(theta) + sqrt(1.0 + theta * theta));
+            if (theta < 0.0) {
+              t = -t;
+            }
+          }
+          c = 1.0 / sqrt(1.0 + t * t);
+          s = t * c;
+          tau = s / (1.0 + c);
+          h = t * a[p + q * n];
+          //  Accumulate corrections to diagonal elements.
+          zw[p] = zw[p] - h;
+          zw[q] = zw[q] + h;
+          eigenvals[p] -= h;
+          eigenvals[q] += h;
+
+          a[p + q * n] = 0.0;
+          //  Rotate, using information from the upper triangle of A only.
+          for (int j = 0; j < p; j++) {
+            g = a[j + p * n];
+            h = a[j + q * n];
+            a[j + p * n] = g - s * (h + g * tau);
+            a[j + q * n] = h + s * (g - h * tau);
+          }
+
+          for (int j = p + 1; j < q; j++) {
+            g = a[p + j * n];
+            h = a[j + q * n];
+            a[p + j * n] = g - s * (h + g * tau);
+            a[j + q * n] = h + s * (g - h * tau);
+          }
+
+          for (int j = q + 1; j < n; j++) {
+            g = a[p + j * n];
+            h = a[q + j * n];
+            a[p + j * n] = g - s * (h + g * tau);
+            a[q + j * n] = h + s * (g - h * tau);
+          }
+          //  Accumulate information in the eigenvector matrix.
+          for (int j = 0; j < n; j++) {
+            g = eigenvecs[j + p * n];
+            h = eigenvecs[j + q * n];
+            eigenvecs[j + p * n] = g - s * (h + g * tau);
+            eigenvecs[j + q * n] = h + s * (g - h * tau);
+          }
+          rotations = rotations + 1;
+        }
+      }
+    }
+
+    for (int i = 0; i < n; i++) {
+      bw[i] = bw[i] + zw[i];
+      eigenvals[i] = bw[i];
+      zw[i] = 0.0;
+    }
+  }
+  //  Restore upper triangle of input matrix.
+  for (int j = 0; j < n; j++) {
+    for (int i = 0; i < j; i++) {
+      a[i + j * n] = a[j + i * n];
+    }
+  }
+  //  Ascending sort the eigenvalues and eigenvectors.
+  for (int k = 0; k < n - 1; k++) {
+    int m = k;
+    for (int l = k + 1; l < n; l++) {
+      if (eigenvals[l] < eigenvals[m]) {
+        m = l;
+      }
+    }
+
+    if (m != k) {
+      t = eigenvals[m];
+      eigenvals[m] = eigenvals[k];
+      eigenvals[k] = t;
+      for (int i = 0; i < n; i++) {
+        w = eigenvecs[i + m * n];
+        eigenvecs[i + m * n] = eigenvecs[i + k * n];
+        eigenvecs[i + k * n] = w;
+      }
+    }
+  }
+
+  delete[] bw;
+  delete[] zw;
+
+  return std::tuple<Matrix, Matrix, int, int>(eigenvecs, eigenvals, iterations,
+                                              rotations);
 }
 
 // functions on VECTORS
@@ -276,64 +481,58 @@ Matrix Matrix::augment(Matrix A, Matrix B) {
   return AB;
 }
 
-Matrix Matrix::gaussianEliminate()
-{
-    Matrix Ab(*this);
-    int rows = Ab.rows_;
-    int cols = Ab.cols_;
-    int Acols = cols - 1;
+Matrix Matrix::gaussianEliminate() {
+  Matrix Ab(*this);
+  int rows = Ab.rows_;
+  int cols = Ab.cols_;
+  int Acols = cols - 1;
 
-    int i = 0; // row tracker
-    int j = 0; // column tracker
+  int i = 0; // row tracker
+  int j = 0; // column tracker
 
-    // iterate through the rows
-    while (i < rows)
-    {
-        // find a pivot for the row
-        bool pivot_found = false;
-        while (j < Acols && !pivot_found)
-        {
-            if (Ab(i, j) != 0) { // pivot not equal to 0
-                pivot_found = true;
-            } else { // check for a possible swap
-                int max_row = i;
-                double max_val = 0;
-                for (int k = i + 1; k < rows; ++k)
-                {
-                    double cur_abs = Ab(k, j) >= 0 ? Ab(k, j) : -1 * Ab(k, j);
-                    if (cur_abs > max_val)
-                    {
-                        max_row = k;
-                        max_val = cur_abs;
-                    }
-                }
-                if (max_row != i) {
-                    Ab.swapRows(max_row, i);
-                    pivot_found = true;
-                } else {
-                    j++;
-                }
-            }
+  // iterate through the rows
+  while (i < rows) {
+    // find a pivot for the row
+    bool pivot_found = false;
+    while (j < Acols && !pivot_found) {
+      if (Ab(i, j) != 0) { // pivot not equal to 0
+        pivot_found = true;
+      } else { // check for a possible swap
+        int max_row = i;
+        double max_val = 0;
+        for (int k = i + 1; k < rows; ++k) {
+          double cur_abs = Ab(k, j) >= 0 ? Ab(k, j) : -1 * Ab(k, j);
+          if (cur_abs > max_val) {
+            max_row = k;
+            max_val = cur_abs;
+          }
         }
-
-        // perform elimination as normal if pivot was found
-        if (pivot_found)
-        {
-            for (int t = i + 1; t < rows; ++t) {
-                for (int s = j + 1; s < cols; ++s) {
-                    Ab(t, s) = Ab(t, s) - Ab(i, s) * (Ab(t, j) / Ab(i, j));
-                    if (Ab(t, s) < EPS && Ab(t, s) > -1*EPS)
-                        Ab(t, s) = 0;
-                }
-                Ab(t, j) = 0;
-            }
+        if (max_row != i) {
+          Ab.swapRows(max_row, i);
+          pivot_found = true;
+        } else {
+          j++;
         }
-
-        i++;
-        j++;
+      }
     }
 
-    return Ab;
+    // perform elimination as normal if pivot was found
+    if (pivot_found) {
+      for (int t = i + 1; t < rows; ++t) {
+        for (int s = j + 1; s < cols; ++s) {
+          Ab(t, s) = Ab(t, s) - Ab(i, s) * (Ab(t, j) / Ab(i, j));
+          if (Ab(t, s) < EPS && Ab(t, s) > -1 * EPS)
+            Ab(t, s) = 0;
+        }
+        Ab(t, j) = 0;
+      }
+    }
+
+    i++;
+    j++;
+  }
+
+  return Ab;
 }
 
 Matrix Matrix::rowReduceFromGaussian() {
@@ -443,17 +642,26 @@ Matrix Matrix::rowReduceFromGaussian() {
 }*/
 
 Matrix Matrix::inverse() {
-    Matrix I = Matrix::createIdentity(rows_);
-    Matrix AI = Matrix::augment(*this, I);
-    Matrix U = AI.gaussianEliminate();
-    Matrix IAInverse = U.rowReduceFromGaussian();
-    Matrix AInverse(rows_, cols_);
-    for (int i = 0; i < AInverse.rows_; ++i) {
-        for (int j = 0; j < AInverse.cols_; ++j) {
-            AInverse(i, j) = IAInverse(i, j + cols_);
-        }
+  Matrix I = Matrix::createIdentity(rows_);
+  Matrix AI = Matrix::augment(*this, I);
+  Matrix U = AI.gaussianEliminate();
+  Matrix IAInverse = U.rowReduceFromGaussian();
+  Matrix AInverse(rows_, cols_);
+  for (int i = 0; i < AInverse.rows_; ++i) {
+    for (int j = 0; j < AInverse.cols_; ++j) {
+      AInverse(i, j) = IAInverse(i, j + cols_);
     }
-    return AInverse;
+  }
+  return AInverse;
+}
+
+Matrix Matrix::getMainDiagonal() {
+  int minDim = std::min(rows_, cols_);
+  Matrix res(1, minDim);
+  for (int i = 0; i < minDim; i++) {
+    res[i] = this->p[i][i];
+  }
+  return res;
 }
 
 /* PRIVATE HELPER FUNCTIONS

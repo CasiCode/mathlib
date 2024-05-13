@@ -6,6 +6,7 @@
 #define __MATRIX_H__
 
 #include <iostream>
+#include <tuple>
 
 class Matrix {
     public:
@@ -17,6 +18,7 @@ class Matrix {
         Matrix& operator=(const Matrix&);
 
         inline double& operator()(int x, int y) { return p[x][y]; }
+        inline double& operator[](int n) { return p[n % rows_][n / rows_]; }
 
         Matrix& operator+=(const Matrix&);
         Matrix& operator-=(const Matrix&);
@@ -32,7 +34,9 @@ class Matrix {
         Matrix transpose();
 
         static Matrix createIdentity(int);
+        static void QRdecomp(int,int, Matrix, Matrix);
         static Matrix solve(Matrix, Matrix);
+        static std::tuple<Matrix, Matrix, int, int> jacobiEigenvalue(int, Matrix, int);
         //static Matrix bandSolve(Matrix, Matrix, int);
 
         // functions on vectors
@@ -45,6 +49,7 @@ class Matrix {
         Matrix rowReduceFromGaussian();
         void readSolutionsFromRREF(std::ostream& os);
         Matrix inverse();
+        Matrix getMainDiagonal();
 
     private:
         int rows_, cols_;
